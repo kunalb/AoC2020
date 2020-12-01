@@ -1,0 +1,10 @@
+[package]
+name = "aoc2020"
+version = "0.1.0"
+authors = ["Kunal Bhalla <bhalla.kunal@gmail.com>"]
+edition = "2018"
+
+[[bin]]
+name = "day1"
+
+[dependencies]
