@@ -19,25 +19,23 @@ fn parse(line: &str) -> Result<(usize, usize, u8, &[u8]), Box<dyn Error>> {
 
 fn solve1(buffer: &str) -> Result<String, Box<dyn Error>> {
     let result = buffer.lines()
-        .filter(|line| {
-            let (min, max, ch, bytes) = parse(line).unwrap();
-            let count = bytes.iter().filter(|b| **b == ch).count();
-            count >= min && count <= max
+        .map(|line| parse(line).unwrap())
+        .filter(|(min, max, ch, bytes)| {
+            let count = bytes.iter().filter(|b| *b == ch).count();
+            count >= *min && count <= *max
         })
         .count();
     Ok(format!("{}",result)) 
 }
 
 fn solve2(buffer: &str) -> Result<String, Box<dyn Error>> {
-    let mut good = 0;
-    for line in buffer.lines() {
-        let (min, max, ch, bytes) = parse(line)?;
-        if (bytes[(min - 1) as usize] == ch) ^ (bytes[(max - 1) as usize] == ch) {
-            good += 1;
-        }
-    }
-
-    Ok(format!("{}", good))
+    let result = buffer.lines()
+        .map(|line| parse(line).unwrap())
+        .filter(|(min, max, ch, bytes)| 
+            (bytes[(min - 1) as usize] == *ch) ^ (bytes[(max - 1) as usize] == *ch)
+        )
+        .count();
+    Ok(format!("{}",result)) 
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
