@@ -7,4 +7,7 @@ edition = "2018"
 [[bin]]
 name = "day1"
 
+[[bin]]
+name = "day2"
+
 [dependencies]
