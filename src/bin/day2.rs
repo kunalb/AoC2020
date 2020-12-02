@@ -11,31 +11,35 @@ fn parse(line: &str) -> Result<(usize, usize, u8, &[u8]), Box<dyn Error>> {
             Regex::new(r#"(?P<min>\d+)-(?P<max>\d+) (?P<ch>.): (?P<pw>.+)"#).unwrap();
     }
     let captures = RE.captures(line).unwrap();
-    Ok((captures.name("min").unwrap().as_str().parse::<usize>()?,
+    Ok((
+        captures.name("min").unwrap().as_str().parse::<usize>()?,
         captures.name("max").unwrap().as_str().parse::<usize>()?,
         captures.name("ch").unwrap().as_str().as_bytes()[0],
-        captures.name("pw").unwrap().as_str().as_bytes()))
+        captures.name("pw").unwrap().as_str().as_bytes(),
+    ))
 }
 
 fn solve1(buffer: &str) -> Result<String, Box<dyn Error>> {
-    let result = buffer.lines()
+    let result = buffer
+        .lines()
         .map(|line| parse(line).unwrap())
         .filter(|(min, max, ch, bytes)| {
             let count = bytes.iter().filter(|b| *b == ch).count();
             count >= *min && count <= *max
         })
         .count();
-    Ok(format!("{}",result)) 
+    Ok(format!("{}", result))
 }
 
 fn solve2(buffer: &str) -> Result<String, Box<dyn Error>> {
-    let result = buffer.lines()
+    let result = buffer
+        .lines()
         .map(|line| parse(line).unwrap())
-        .filter(|(min, max, ch, bytes)| 
+        .filter(|(min, max, ch, bytes)| {
             (bytes[(min - 1) as usize] == *ch) ^ (bytes[(max - 1) as usize] == *ch)
-        )
+        })
         .count();
-    Ok(format!("{}",result)) 
+    Ok(format!("{}", result))
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
