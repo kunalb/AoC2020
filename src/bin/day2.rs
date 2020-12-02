@@ -5,36 +5,27 @@ use std::io::{self, Read};
 use lazy_static::lazy_static;
 use regex::Regex;
 
-fn parse(line: &str) -> Result<(u32, u32, u8, &[u8]), Box<dyn Error>> {
+fn parse(line: &str) -> Result<(usize, usize, u8, &[u8]), Box<dyn Error>> {
     lazy_static! {
         static ref RE: Regex =
             Regex::new(r#"(?P<min>\d+)-(?P<max>\d+) (?P<ch>.): (?P<pw>.+)"#).unwrap();
     }
     let captures = RE.captures(line).unwrap();
-    Ok((captures.name("min").unwrap().as_str().parse::<u32>()?,
-        captures.name("max").unwrap().as_str().parse::<u32>()?,
+    Ok((captures.name("min").unwrap().as_str().parse::<usize>()?,
+        captures.name("max").unwrap().as_str().parse::<usize>()?,
         captures.name("ch").unwrap().as_str().as_bytes()[0],
         captures.name("pw").unwrap().as_str().as_bytes()))
 }
 
 fn solve1(buffer: &str) -> Result<String, Box<dyn Error>> {
-    let mut good = 0;
-    for line in buffer.lines() {
-        let (min, max, ch, bytes) = parse(line)?;
-
-        let mut count = 0;
-        for b in bytes {
-            if *b == ch {
-                count += 1;
-            }
-        }
-
-        if count >= min && count <= max {
-            good += 1;
-        }
-    }
-
-    Ok(format!("{}", good))
+    let result = buffer.lines()
+        .filter(|line| {
+            let (min, max, ch, bytes) = parse(line).unwrap();
+            let count = bytes.iter().filter(|b| **b == ch).count();
+            count >= min && count <= max
+        })
+        .count();
+    Ok(format!("{}",result)) 
 }
 
 fn solve2(buffer: &str) -> Result<String, Box<dyn Error>> {
