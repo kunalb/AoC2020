@@ -1,20 +1,27 @@
-use std::io::{self, Read};
-use std::error::Error;
 use std::env;
+use std::error::Error;
+use std::io::{self, Read};
+
+use lazy_static::lazy_static;
+use regex::Regex;
+
+fn parse(line: &str) -> Result<(u32, u32, u8, &[u8]), Box<dyn Error>> {
+    lazy_static! {
+        static ref RE: Regex =
+            Regex::new(r#"(?P<min>\d+)-(?P<max>\d+) (?P<ch>.): (?P<pw>.+)"#).unwrap();
+    }
+    let captures = RE.captures(line).unwrap();
+    Ok((captures.name("min").unwrap().as_str().parse::<u32>()?,
+        captures.name("max").unwrap().as_str().parse::<u32>()?,
+        captures.name("ch").unwrap().as_str().as_bytes()[0],
+        captures.name("pw").unwrap().as_str().as_bytes()))
+}
 
 fn solve1(buffer: &str) -> Result<String, Box<dyn Error>> {
     let mut good = 0;
     for line in buffer.lines() {
-        let parts = line.split(":").collect::<Vec<_>>();
-        let bytes = parts[1].trim().as_bytes();
+        let (min, max, ch, bytes) = parse(line)?;
 
-        let input0 = parts[0].split(" ").collect::<Vec<_>>();
-        let range = input0[0].split("-").collect::<Vec<_>>();
-        let ch = input0[1].as_bytes()[0];
-
-        let min = range[0].parse::<u32>()?;
-        let max = range[1].parse::<u32>()?;
-        
         let mut count = 0;
         for b in bytes {
             if *b == ch {
@@ -25,7 +32,6 @@ fn solve1(buffer: &str) -> Result<String, Box<dyn Error>> {
         if count >= min && count <= max {
             good += 1;
         }
-
     }
 
     Ok(format!("{}", good))
@@ -34,16 +40,7 @@ fn solve1(buffer: &str) -> Result<String, Box<dyn Error>> {
 fn solve2(buffer: &str) -> Result<String, Box<dyn Error>> {
     let mut good = 0;
     for line in buffer.lines() {
-        let parts = line.split(":").collect::<Vec<_>>();
-        let bytes = parts[1].trim().as_bytes();
-
-        let input0 = parts[0].split(" ").collect::<Vec<_>>();
-        let range = input0[0].split("-").collect::<Vec<_>>();
-        let ch = input0[1].as_bytes()[0];
-
-        let min = range[0].parse::<u32>()?;
-        let max = range[1].parse::<u32>()?;
-
+        let (min, max, ch, bytes) = parse(line)?;
         if (bytes[(min - 1) as usize] == ch) ^ (bytes[(max - 1) as usize] == ch) {
             good += 1;
         }
@@ -57,16 +54,14 @@ fn main() -> Result<(), Box<dyn Error>> {
     io::stdin().read_to_string(&mut buffer)?;
 
     let args: Vec<String> = env::args().collect();
-    if args.len() >1 && args[1] == "2" {
+    if args.len() > 1 && args[1] == "2" {
         println!("{}", solve2(&buffer)?);
     } else {
         println!("{}", solve1(&buffer)?);
     }
 
-
     Ok(())
 }
-
 
 #[cfg(test)]
 mod test {
@@ -74,17 +69,17 @@ mod test {
 
     #[test]
     fn test1() {
-        let input="1-3 a: abcde
+        let input = "1-3 a: abcde
 1-3 b: cdefg
 2-9 c: ccccccccc";
-        println!("{}", solve1(input).unwrap());
+        assert_eq!(solve1(input).unwrap(), "2");
     }
 
     #[test]
     fn test2() {
-        let input="1-3 a: abcde
+        let input = "1-3 a: abcde
 1-3 b: cdefg
 2-9 c: ccccccccc";
-        println!("{}", solve2(input).unwrap());
+        assert_eq!(solve2(input).unwrap(), "1");
     }
 }
