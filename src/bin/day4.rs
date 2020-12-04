@@ -8,32 +8,6 @@ use itertools::Itertools;
 use lazy_static::lazy_static;
 use regex::Regex;
 
-fn solve1(buffer: &str) -> Result<String, Box<dyn Error>> {
-    let mut valid_passports = 0;
-    let req: HashSet<&str> = ["byr", "iyr", "eyr", "hgt", "hcl", "ecl", "pid", "cid"]
-        .iter()
-        .cloned()
-        .collect();
-
-    let mut current = req.clone();
-    for line in buffer.lines().chain(iter::once("")) {
-        if line == "" {
-            if current.is_empty() || (current.len() == 1 && current.contains("cid")) {
-                valid_passports += 1;
-            }
-            current = req.clone();
-        } else {
-            let pieces = line.split(" ");
-            for piece in pieces {
-                let key = piece.split(":").collect::<Vec<_>>();
-                current.remove(key[0]);
-            }
-        }
-    }
-
-    Ok(format!("{}", valid_passports))
-}
-
 fn range_check(val: &str, min: i64, max: i64) -> bool {
     if let Ok(val) = val.parse::<i64>() {
         min <= val && val <= max
@@ -42,7 +16,7 @@ fn range_check(val: &str, min: i64, max: i64) -> bool {
     }
 }
 
-fn solve2(buffer: &str) -> Result<String, Box<dyn Error>> {
+fn verify(key: &str, val: &str) -> bool {
     lazy_static! {
         static ref HCL_RE: Regex = Regex::new(r#"^#[a-f0-9]{6}$"#).unwrap();
         static ref PID_RE: Regex = Regex::new(r#"^[0-9]{9}$"#).unwrap();
@@ -53,6 +27,27 @@ fn solve2(buffer: &str) -> Result<String, Box<dyn Error>> {
                 .collect();
     }
 
+    match key {
+        "byr" => range_check(val, 1920, 2002),
+        "iyr" => range_check(val, 2010, 2020),
+        "eyr" => range_check(val, 2020, 2030),
+        "hgt" => {
+            let height = &val[..val.len() - 2];
+            match &val[val.len() - 2..] {
+                "in" => range_check(height, 59, 76),
+                "cm" => range_check(height, 150, 193),
+                _ => false,
+            }
+        }
+        "hcl" => HCL_RE.is_match(val),
+        "ecl" => ECL_SET.contains(val),
+        "pid" => PID_RE.is_match(val),
+        "cid" => true,
+        _ => false,
+    }
+}
+
+fn solve(buffer: &str, validate: bool) -> Result<String, Box<dyn Error>> {
     let mut valid_passports = 0;
     let req: HashSet<&str> = ["byr", "iyr", "eyr", "hgt", "hcl", "ecl", "pid", "cid"]
         .iter()
@@ -69,26 +64,7 @@ fn solve2(buffer: &str) -> Result<String, Box<dyn Error>> {
         } else {
             for piece in line.split(" ") {
                 let (key, val) = piece.split(":").collect_tuple().unwrap();
-                let valid = match key {
-                    "byr" => range_check(val, 1920, 2002),
-                    "iyr" => range_check(val, 2010, 2020),
-                    "eyr" => range_check(val, 2020, 2030),
-                    "hgt" => {
-                        let height = &val[..val.len() - 2];
-                        match &val[val.len() - 2..] {
-                            "in" => range_check(height, 59, 76), 
-                            "cm" => range_check(height, 150, 193),
-                            _ => false,
-                        }
-                    }
-                    "hcl" => HCL_RE.is_match(val),
-                    "ecl" => ECL_SET.contains(val),
-                    "pid" => PID_RE.is_match(val),
-                    "cid" => true,
-                    _ => false,
-                };
-
-                if valid {
+                if !validate || verify(key, val) {
                     current.remove(key);
                 }
             }
@@ -104,9 +80,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let args: Vec<String> = env::args().collect();
     if args.len() > 1 && args[1] == "2" {
-        println!("{}", solve2(&buffer)?);
+        println!("{}", solve(&buffer, true)?);
     } else {
-        println!("{}", solve1(&buffer)?);
+        println!("{}", solve(&buffer, false)?);
     }
 
     Ok(())
@@ -131,7 +107,7 @@ hgt:179cm
 
 hcl:#cfa07d eyr:2025 pid:166559648
 iyr:2011 ecl:brn hgt:59in";
-        assert_eq!("2", solve1(test_input).unwrap());
+        assert_eq!("2", solve(test_input, false).unwrap());
     }
 
     #[test]
@@ -162,6 +138,6 @@ pid:545766238 ecl:hzl
 eyr:2022
 
 iyr:2010 hgt:158cm hcl:#b6652a ecl:blu byr:1944 eyr:2021 pid:093154719";
-        assert_eq!("4", solve2(tests).unwrap());
+        assert_eq!("4", solve(tests, true).unwrap());
     }
 }
