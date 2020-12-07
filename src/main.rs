@@ -24,6 +24,8 @@ fn solve2(buffer: &str) -> Result<String, Box<dyn Error>> {
 
 
 fn main() -> Result<(), Box<dyn Error>> {
+    let now = std::time::Instant::now();
+
     let mut buffer = String::new();
     io::stdin().read_to_string(&mut buffer)?;
     println!("So it begins!");
@@ -35,7 +37,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         println!("{}", solve1(&buffer)?);
     }
 
-
+    eprintln!("Time: {}ms", now.elapsed().as_millis());
     Ok(())
 }
 
