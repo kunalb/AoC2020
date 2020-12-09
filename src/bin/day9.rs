@@ -2,12 +2,14 @@ use std::env;
 use std::error::Error;
 use std::io::{self, Read};
 
-fn solve1(buffer: &str, pred: usize) -> u64 {
-    let numbers = buffer
+fn parse(buffer: &str) -> Vec<u64> {
+    buffer
         .lines()
         .map(|x| x.parse::<u64>().unwrap())
-        .collect::<Vec<_>>();
+        .collect::<Vec<_>>()
+}
 
+fn solve1(numbers: &[u64], pred: usize) -> u64 {
     'outer: for (i, number) in numbers[pred..].iter().enumerate() {
         let pred = &numbers[i..(i + pred)];
         for a in pred {
@@ -20,17 +22,11 @@ fn solve1(buffer: &str, pred: usize) -> u64 {
 
         return *number;
     }
-
     panic!("No soln");
 }
 
-fn solve2(buffer: &str, pred: usize) -> u64 {
-    let target = solve1(buffer, pred);
-
-    let numbers = buffer
-        .lines()
-        .map(|x| x.parse::<u64>().unwrap())
-        .collect::<Vec<_>>();
+fn solve2(numbers: &[u64], pred: usize) -> u64 {
+    let target = solve1(numbers, pred);
 
     let mut start = 0;
     let mut stop = 1;
@@ -59,11 +55,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut buffer = String::new();
     io::stdin().read_to_string(&mut buffer)?;
 
+    let numbers = parse(&buffer);
+
     let args: Vec<String> = env::args().collect();
     if args.len() > 1 && args[1] == "2" {
-        println!("{}", solve2(&buffer, 25));
+        println!("{}", solve2(&numbers, 25));
     } else {
-        println!("{}", solve1(&buffer, 25));
+        println!("{}", solve1(&numbers, 25));
     }
 
     eprintln!("Time: {}ms", now.elapsed().as_millis());
@@ -96,6 +94,6 @@ mod test {
 277
 309
 576";
-        solve2(&input, 5);
+        assert_eq!(solve2(&parse(input), 5), 62);
     }
 }
