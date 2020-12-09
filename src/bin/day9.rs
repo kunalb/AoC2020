@@ -37,12 +37,12 @@ fn solve2(numbers: &[u64], pred: usize) -> u64 {
                 + numbers[start..stop].iter().max().unwrap();
         }
 
-        while sum + numbers[stop] > target {
+        if sum + numbers[stop] > target {
             sum -= numbers[start];
             start += 1;
         }
 
-        while sum + numbers[stop] <= target {
+        if sum + numbers[stop] <= target {
             sum += numbers[stop];
             stop += 1;
         }
