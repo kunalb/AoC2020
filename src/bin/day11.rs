@@ -1,6 +1,7 @@
 use std::env;
 use std::error::Error;
 use std::io::{self, Read};
+use itertools::Itertools;
 
 fn parse(buffer: &str) -> Vec<Vec<char>> {
     buffer
@@ -9,128 +10,89 @@ fn parse(buffer: &str) -> Vec<Vec<char>> {
         .collect::<Vec<_>>()
 }
 
-fn solve1(buffer: &str) -> usize {
+fn simulate<F>(buffer: &str, f: F) -> usize
+where
+    F: Fn(&Vec<Vec<char>>, usize, usize) -> char,
+{
     let mut grid = parse(buffer);
+    let mut next_grid = grid.clone();
 
     loop {
-        let mut changes = 0;
-        let mut nextgrid: Vec<Vec<char>> = Vec::new();
+        let mut changed = false;
 
         for row in grid.iter().enumerate() {
-            let mut new_row = Vec::new();
             for col in row.1.iter().enumerate() {
-                let mut occ = 0;
-
-                for i in -1..=1 {
-                    for j in -1..=1 {
-                        if i == 0 && j == 0 {
-                            continue;
-                        }
-
-                        let r: i32 = row.0 as i32 + i;
-                        let c: i32 = col.0 as i32 + j;
-
-                        if r >= 0
-                            && c >= 0
-                            && (r as usize) < grid.len()
-                            && (c as usize) < row.1.len()
-                            && grid[r as usize][c as usize] == '#'
-                        {
-                            occ += 1;
-                        }
-                    }
-                }
-
-                new_row.push(match *col.1 as char {
-                    'L' if occ == 0 => {
-                        changes += 1;
-                        '#'
-                    }
-                    '#' if occ >= 4 => {
-                        changes += 1;
-                        'L'
-                    }
-                    x => x,
-                });
+                let ch = f(&grid, row.0, col.0);
+                changed |= ch != *col.1;
+                next_grid[row.0][col.0] = ch;
             }
-            nextgrid.push(new_row);
         }
 
-        grid = nextgrid;
-        if changes == 0 {
+        let temp = grid;
+        grid = next_grid;
+        next_grid = temp;
+
+        if !changed {
             return grid.iter().flatten().filter(|x| **x == '#').count();
         }
     }
 }
 
+fn get(grid: &Vec<Vec<char>>, row: i32, col: i32) -> Option<char> {
+    if row < 0 || col < 0 {
+        return None;
+    } else {
+        grid.get(row as usize).and_then(|row| row.get(col as usize)).copied()
+    }
+}
+
+fn solve1(buffer: &str) -> usize {
+    simulate(buffer, |grid, row, col| {
+        let occ = (-1..=1).cartesian_product(-1..=1)
+            .filter(|(dr, dc)| *dr != 0 || *dc != 0)
+            .filter(|(dr, dc)| match get(grid, row as i32 + dr, col as i32 + dc) {
+                Some('#') => true,
+                _ => false,
+            })
+            .count();
+
+        match grid[row][col] {
+            'L' if occ == 0 => '#',
+            '#' if occ >= 4 => 'L',
+            x => x,
+        }
+    })
+}
+
 fn solve2(buffer: &str) -> usize {
-    let mut grid = parse(buffer);
+    simulate(buffer, |grid, row, col| {
+        let occ = (-1..=1).cartesian_product(-1..=1)
+            .filter(|(dr, dc)| *dr != 0 || *dc != 0)
+            .filter(|(dr, dc)| {
+                let mut r: i32 = row as i32;
+                let mut c: i32 = col as i32;
 
-    loop {
-        let mut changes = 0;
-        let mut nextgrid: Vec<Vec<char>> = Vec::new();
+                loop {
+                    r += dr;
+                    c += dc;
 
-        for row in grid.iter().enumerate() {
-            let mut new_row = Vec::new();
-            for col in row.1.iter().enumerate() {
-                let mut occ = 0;
-
-                for dr in &[-1, 0, 1] {
-                    for dc in &[-1, 0, 1] {
-                        if *dr == 0 && *dc == 0 {
-                            continue;
-                        }
-
-                        let mut r: i32 = row.0 as i32;
-                        let mut c: i32 = col.0 as i32;
-
-                        loop {
-                            r += dr;
-                            c += dc;
-
-                            if r >= 0
-                                && c >= 0
-                                && (r as usize) < grid.len()
-                                && (c as usize) < row.1.len()
-                            {
-                                match grid[r as usize][c as usize] {
-                                    'L' => {
-                                        break;
-                                    }
-                                    '#' => {
-                                        occ += 1;
-                                        break;
-                                    }
-                                    _ => {}
-                                }
-                            } else {
-                                break;
-                            }
-                        }
+                    match get(grid, r, c) {
+                        Some('#') => return true,
+                        Some('L') | None => break,
+                        _ => {}
                     }
                 }
 
-                new_row.push(match *col.1 as char {
-                    'L' if occ == 0 => {
-                        changes += 1;
-                        '#'
-                    }
-                    '#' if occ >= 5 => {
-                        changes += 1;
-                        'L'
-                    }
-                    x => x,
-                });
-            }
-            nextgrid.push(new_row);
-        }
+                false
+            })
+            .count();
 
-        grid = nextgrid;
-
-        if changes == 0 {
-            return grid.iter().flatten().filter(|x| **x == '#').count();
+        match grid[row][col] {
+            'L' if occ == 0 => '#',
+            '#' if occ >= 5 => 'L',
+            x => x,
         }
-    }
+    })
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
