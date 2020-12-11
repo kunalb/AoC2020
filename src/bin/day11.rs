@@ -9,7 +9,7 @@ fn parse(buffer: &str) -> Vec<Vec<char>> {
         .collect::<Vec<_>>()
 }
 
-fn solve1(buffer: &str) -> Result<String, Box<dyn Error>> {
+fn solve1(buffer: &str) -> usize {
     let mut grid = parse(buffer);
 
     loop {
@@ -21,8 +21,8 @@ fn solve1(buffer: &str) -> Result<String, Box<dyn Error>> {
             for col in row.1.iter().enumerate() {
                 let mut occ = 0;
 
-                for i in -1..1 {
-                    for j in -1..1 {
+                for i in -1..=1 {
+                    for j in -1..=1 {
                         if i == 0 && j == 0 {
                             continue;
                         }
@@ -58,29 +58,17 @@ fn solve1(buffer: &str) -> Result<String, Box<dyn Error>> {
 
         grid = nextgrid;
         if changes == 0 {
-            let mut total = 0;
-            for row in grid {
-                for col in row {
-                    if col == '#' {
-                        total += 1;
-                    }
-                }
-            }
-
-            return Ok(format!("{}", total));
+            return grid.iter().flatten().filter(|x| **x == '#').count();
         }
     }
 }
 
-fn solve2(buffer: &str) -> Result<String, Box<dyn Error>> {
-    let mut grid = buffer
-        .lines()
-        .map(|x| x.as_bytes().to_vec())
-        .collect::<Vec<_>>();
+fn solve2(buffer: &str) -> usize {
+    let mut grid = parse(buffer);
 
     loop {
         let mut changes = 0;
-        let mut nextgrid: Vec<Vec<u8>> = Vec::new();
+        let mut nextgrid: Vec<Vec<char>> = Vec::new();
 
         for row in grid.iter().enumerate() {
             let mut new_row = Vec::new();
@@ -105,7 +93,7 @@ fn solve2(buffer: &str) -> Result<String, Box<dyn Error>> {
                                 && (r as usize) < grid.len()
                                 && (c as usize) < row.1.len()
                             {
-                                match grid[r as usize][c as usize] as char {
+                                match grid[r as usize][c as usize] {
                                     'L' => {
                                         break;
                                     }
@@ -125,13 +113,13 @@ fn solve2(buffer: &str) -> Result<String, Box<dyn Error>> {
                 new_row.push(match *col.1 as char {
                     'L' if occ == 0 => {
                         changes += 1;
-                        '#' as u8
+                        '#'
                     }
                     '#' if occ >= 5 => {
                         changes += 1;
-                        'L' as u8
+                        'L'
                     }
-                    x => x as u8,
+                    x => x,
                 });
             }
             nextgrid.push(new_row);
@@ -140,16 +128,7 @@ fn solve2(buffer: &str) -> Result<String, Box<dyn Error>> {
         grid = nextgrid;
 
         if changes == 0 {
-            let mut total = 0;
-            for row in grid {
-                for col in row {
-                    if col == '#' as u8 {
-                        total += 1;
-                    }
-                }
-            }
-
-            return Ok(format!("{}", total));
+            return grid.iter().flatten().filter(|x| **x == '#').count();
         }
     }
 }
@@ -162,9 +141,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let args: Vec<String> = env::args().collect();
     if args.len() > 1 && args[1] == "2" {
-        println!("{}", solve2(&buffer)?);
+        println!("{}", solve2(&buffer));
     } else {
-        println!("{}", solve1(&buffer)?);
+        println!("{}", solve1(&buffer));
     }
 
     eprintln!("Time: {}ms", now.elapsed().as_millis());
@@ -188,11 +167,11 @@ L.LLLLL.LL";
 
     #[test]
     fn test1() {
-        assert_eq!(solve1(INPUT).unwrap(), "37");
+        assert_eq!(solve1(INPUT), 37);
     }
 
     #[test]
     fn test2() {
-        assert_eq!(solve2(INPUT).unwrap(), "26");
+        assert_eq!(solve2(INPUT), 26);
     }
 }
