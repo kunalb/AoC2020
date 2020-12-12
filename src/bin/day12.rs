@@ -25,24 +25,12 @@ fn solve1(buffer: &str) -> Result<i32, Box<dyn Error>> {
             }
             "L" => {
                 for _ in 0..(dist / 90) {
-                    dir = match dir {
-                        (1, 0) => (0, 1),
-                        (0, 1) => (-1, 0),
-                        (-1, 0) => (0, -1),
-                        (0, -1) => (1, 0),
-                        _ => unreachable!(),
-                    }
+                    dir = (-dir.1, dir.0)
                 }
             }
             "R" => {
                 for _ in 0..(dist / 90) {
-                    dir = match dir {
-                        (1, 0) => (0, -1),
-                        (0, 1) => (1, 0),
-                        (-1, 0) => (0, 1),
-                        (0, -1) => (-1, 0),
-                        _ => unreachable!(),
-                    }
+                    dir = (dir.1, -dir.0)
                 }
             }
             "F" => {
@@ -127,6 +115,6 @@ F11";
 
     #[test]
     fn test1() {
-        assert_eq!(solve1(INPUT), Ok(25));
+        assert_eq!(solve1(INPUT).unwrap(), 25);
     }
 }
