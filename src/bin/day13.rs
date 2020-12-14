@@ -135,18 +135,16 @@ mod test {
 17,x,13,19";
 
     #[test]
-    fn test1() {}
-
-    #[test]
     fn test_inv() {
         assert_eq!(inv(17, 19), 9);
         assert_eq!(inv(13, 19), 3);
         assert_eq!(inv(17, 13), 10);
+        assert_eq!(inv(67, 59), 37);
     }
 
     #[test]
     fn test2() {
-        println!("{}", solve2(INPUT).unwrap());
+        assert_eq!(solve2(INPUT).unwrap(), 0);
     }
 
     #[test]
