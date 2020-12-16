@@ -6,84 +6,59 @@ use std::io::{self, Read};
 use lazy_static::lazy_static;
 use regex::Regex;
 
-fn parse(line: &str) -> Result<Vec<(usize, usize)>, Box<dyn Error>> {
-    lazy_static! {
-        static ref RE: Regex =
-            Regex::new(r#".*?(?P<a>\d+)-(?P<b>\d+) or (?P<c>\d+)-(?P<d>\d+).*"#).unwrap();
-    }
-    let captures = RE.captures(line).unwrap();
-    let result = vec![
-        (
-            captures.name("a").unwrap().as_str().parse::<usize>()?,
-            captures.name("b").unwrap().as_str().parse::<usize>()?,
-        ),
-        (
-            captures.name("c").unwrap().as_str().parse::<usize>()?,
-            captures.name("d").unwrap().as_str().parse::<usize>()?,
-        ),
-    ];
-
-    Ok(result)
-}
-
-fn parse2(line: &str) -> Result<(String, Vec<(usize, usize)>), Box<dyn Error>> {
+fn parse(line: &str) -> Result<(String, Vec<(usize, usize)>), Box<dyn Error>> {
     lazy_static! {
         static ref RE: Regex =
             Regex::new(r#"(?P<label>.*?): (?P<a>\d+)-(?P<b>\d+) or (?P<c>\d+)-(?P<d>\d+).*"#)
                 .unwrap();
     }
+
+    fn val(c: Option<regex::Match>) -> Result<usize, Box<dyn Error>> {
+        Ok(c.unwrap().as_str().parse::<usize>()?)
+    }
+
     let captures = RE.captures(line).unwrap();
     let result = vec![
-        (
-            captures.name("a").unwrap().as_str().parse::<usize>()?,
-            captures.name("b").unwrap().as_str().parse::<usize>()?,
-        ),
-        (
-            captures.name("c").unwrap().as_str().parse::<usize>()?,
-            captures.name("d").unwrap().as_str().parse::<usize>()?,
-        ),
+        (val(captures.name("a"))?, val(captures.name("b"))?),
+        (val(captures.name("c"))?, val(captures.name("d"))?),
     ];
 
     Ok((captures.name("label").unwrap().as_str().to_string(), result))
 }
 
-fn solve1(buffer: &str) -> Result<String, Box<dyn Error>> {
+fn solve1(buffer: &str) -> Result<usize, Box<dyn Error>> {
     let pieces = buffer.split("\n\n").collect::<Vec<_>>();
+    let rules = pieces[0]
+        .lines()
+        .filter_map(|line| parse(line).map(|x| x.1).ok())
+        .collect::<Vec<_>>();
 
-    let mut rules: Vec<Vec<(usize, usize)>> = vec![];
-
-    for line in pieces[0].lines() {
-        if let Ok(r) = parse(line) {
-            rules.push(r)
-        }
-    }
-
-    let mut error_rate: usize = 0;
-    // dbg!(&rules);
-    'ticket: for line in pieces[2].lines().skip(1) {
-        for var in line.trim().split(",") {
-            let var = var.parse::<usize>()?;
-            let mut passed = false;
-            'rules: for rule in &rules {
-                for range in rule {
-                    if var <= range.1 && var >= range.0 {
-                        // dbg!(var, range);
-                        passed = true;
-                        break 'rules;
-                    }
-                }
-            }
-            if !passed {
-                // dbg!(var);
-                error_rate += var;
-            }
-        }
-    }
-
-    Ok(error_rate.to_string())
+    Ok(pieces[2]
+        .lines()
+        .skip(1)
+       .map(|line| line.split(","))
+       .flatten()
+       .filter_map(|var| var.parse::<usize>().ok())
+                .filter(|var| {
+                    !rules
+                        .iter()
+                        .any(|rule| rule.iter().any(|range| range.0 <= *var && *var <= range.1))
+                })
+        .sum())
+        // .map(|line| {
+        //     line.split(",")
+        //         .filter_map(|var| var.parse::<usize>().ok())
+        //         .filter(|var| {
+        //             !rules
+        //                 .iter()
+        //                 .any(|rule| rule.iter().any(|range| range.0 <= *var && *var <= range.1))
+        //         })
+        //         .sum::<usize>()
+        // })
+        // .sum())
 }
 
-fn solve2(buffer: &str) -> Result<String, Box<dyn Error>> {
+fn solve2(buffer: &str) -> Result<usize, Box<dyn Error>> {
     let pieces = buffer.split("\n\n").collect::<Vec<_>>();
 
     let mut rules: Vec<(String, Vec<(usize, usize)>)> = vec![];
@@ -100,7 +75,7 @@ fn solve2(buffer: &str) -> Result<String, Box<dyn Error>> {
         .collect::<Vec<usize>>();
 
     for line in pieces[0].lines() {
-        if let Ok(r) = parse2(line) {
+        if let Ok(r) = parse(line) {
             positions.insert(r.0.clone(), (0..myticket.len()).collect::<HashSet<usize>>());
             rules.push(r);
         }
@@ -145,7 +120,7 @@ fn solve2(buffer: &str) -> Result<String, Box<dyn Error>> {
             if indexes.len() == 1 {
                 fixed.insert(label.clone(), *indexes.iter().next().unwrap());
                 changes = true;
-            } 
+            }
         }
 
         for (label, index) in &fixed {
@@ -162,10 +137,9 @@ fn solve2(buffer: &str) -> Result<String, Box<dyn Error>> {
         if label.contains("departure") {
             result *= myticket[index];
         }
-
     }
-    
-    Ok(result.to_string())
+
+    Ok(result)
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -189,9 +163,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 mod test {
     use super::*;
 
-    #[test]
-    fn test1() {
-        let input = "class;: 1-3 or 5-7
+    const INPUT: &'static str = "class;: 1-3 or 5-7
 row: 6-11 or 33-44
 seat: 13-40 or 45-50
 
@@ -204,24 +176,13 @@ nearby tickets:
 55,2,20
 38,6,12";
 
-        // dbg!(solve1(input).unwrap());
+    #[test]
+    fn test1() {
+        assert_eq!(solve1(INPUT).unwrap(), 71);
     }
 
     #[test]
     fn test2() {
-        let input = "class;: 1-3 or 5-7
-row: 6-11 or 33-44
-seat: 13-40 or 45-50
-
-your ticket:
-7,1,14
-
-nearby tickets:
-7,3,47
-40,4,50
-55,2,20
-38,6,12";
-
-        dbg!(solve2(input).unwrap());
+        assert_eq!(solve2(INPUT).unwrap(), 1);
     }
 }
