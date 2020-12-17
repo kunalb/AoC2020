@@ -4,6 +4,31 @@ use std::error::Error;
 use std::io::{self, Read};
 use itertools::iproduct;
 
+fn solve(buffer: &str, dims: usize) {
+    let mut hypercube: HashMap<Vec<i64>, bool> = HashMap::new();
+    let mut ranges: HashMap<usize, (i64, i64)> = HashMap::new();
+
+    for (y, line) in buffer.lines().enumerate() {
+        for (x, ch) in line.chars().enumerate() {
+            let path = vec![0; dims];
+            path[dims - 1] = x;
+            path[dims - 2] = y;
+
+            let pt = hypercube.entry(path)
+                .or_insert(false);
+            *pt = match ch {
+                '.' => false,
+                '#' => true,
+                _ => unreachable!(),
+            };
+
+            x_range.1 = x as i64;
+        }
+
+        y_range.1 = y as i64;
+    }
+}
+
 fn solve1(buffer: &str) -> Result<usize, Box<dyn Error>> {
     let mut cube: HashMap<i64, HashMap<i64, HashMap<i64, bool>>> = HashMap::new();
     let mut next_cube = cube.clone();
