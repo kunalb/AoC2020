@@ -45,17 +45,6 @@ fn solve1(buffer: &str) -> Result<usize, Box<dyn Error>> {
                         .any(|rule| rule.iter().any(|range| range.0 <= *var && *var <= range.1))
                 })
         .sum())
-        // .map(|line| {
-        //     line.split(",")
-        //         .filter_map(|var| var.parse::<usize>().ok())
-        //         .filter(|var| {
-        //             !rules
-        //                 .iter()
-        //                 .any(|rule| rule.iter().any(|range| range.0 <= *var && *var <= range.1))
-        //         })
-        //         .sum::<usize>()
-        // })
-        // .sum())
 }
 
 fn solve2(buffer: &str) -> Result<usize, Box<dyn Error>> {
