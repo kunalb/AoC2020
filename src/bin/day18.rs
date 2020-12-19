@@ -210,40 +210,40 @@ mod test {
 
     #[test]
     fn test1() {
-        assert_eq!(solve1("1 + 2 * 3 + 4 * 5 + 6").unwrap(), "71");
+        assert_eq!(solve1("1 + 2 * 3 + 4 * 5 + 6").unwrap(), 71);
     }
 
     #[test]
     fn test2() {
-        assert_eq!(solve2("1 + 2 * 3 + 4 * 5 + 6").unwrap(), "231");
+        assert_eq!(solve2("1 + 2 * 3 + 4 * 5 + 6").unwrap(), 231);
     }
 
     #[test]
     fn test_tree() {
-        assert_eq!(solve2("2 * 3 + 5").unwrap(), "16");
+        assert_eq!(solve2("2 * 3 + 5").unwrap(), 16);
     }
 
     #[test]
     fn test_par() {
-        assert_eq!(solve2("2 * 3 + (4 * 5)").unwrap(), "46");
+        assert_eq!(solve2("2 * 3 + (4 * 5)").unwrap(), 46);
     }
 
     #[test]
     fn test_nested_sum() {
-        assert_eq!(solve2("((1 * 2) + (3 * 4) + 5) + 6").unwrap(), "25");
+        assert_eq!(solve2("((1 * 2) + (3 * 4) + 5) + 6").unwrap(), 25);
     }
 
     #[test]
     fn test_complex() {
-        assert_eq!(solve2("5 + (8 * 3 + 9 + 3 * 4 * 3)").unwrap(), "1445");
+        assert_eq!(solve2("5 + (8 * 3 + 9 + 3 * 4 * 3)").unwrap(), 1445);
         assert_eq!(
             solve2("5 * 9 * (7 * 3 * 3 + 9 * 3 + (8 + 6 * 4))").unwrap(),
-            "669060"
+            669060
         );
         assert_eq!(
             solve2("((2 + 4 * 9) * (6 + 9 * 8 + 6) + 6) + 2 + 4 * 2").unwrap(),
-            "23340"
+            23340
         );
-        assert_eq!(solve2("(5 * 2 + 3) + 4").unwrap(), "29");
+        assert_eq!(solve2("(5 * 2 + 3) + 4").unwrap(), 29);
     }
 }

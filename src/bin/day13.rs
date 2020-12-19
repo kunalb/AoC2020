@@ -144,7 +144,7 @@ mod test {
 
     #[test]
     fn test2() {
-        assert_eq!(solve2(INPUT).unwrap(), 0);
+        assert_eq!(solve2(INPUT).unwrap(), 3417);
     }
 
     #[test]
