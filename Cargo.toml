@@ -64,6 +64,9 @@ name = "day18"
 [[bin]]
 name = "day19"
 
+[[bin]]
+name = "day20"
+
 [dependencies]
 lazy_static = "1.4.0"
 itertools = "0.9.0"
