@@ -28,7 +28,6 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut buffer = String::new();
     io::stdin().read_to_string(&mut buffer)?;
-    println!("So it begins!");
 
     let args: Vec<String> = env::args().collect();
     if args.len() >1 && args[1] == "2" {
