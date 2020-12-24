@@ -511,9 +511,7 @@ fn solve2(buffer: &str) -> Result<usize, Box<dyn Error>> {
             print_picture(&pic);
             println!();
             let roughness = pic.iter().flatten().filter(|x| **x == '#').count();
-            let monster_size = MONSTER.chars().filter(|x| *x == '#').count();
-
-            return Ok(roughness - monsters * monster_size);
+            return Ok(roughness);
         }
 
         pic = rotate_pic(&pic);
