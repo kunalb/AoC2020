@@ -69,11 +69,6 @@ impl TileMeta {
         (x, y)
     }
 
-    fn get(&self, tile: &Tile, x: usize, y: usize) -> char {
-        let (x, y) = self.lookup(x, y);
-        tile.contents[y][x]
-    }
-
     fn border(&self, tile: &Tile, dir: Dir) -> u16 {
         let mut dir = dir;
         let mut flip_contents = false;
@@ -256,17 +251,9 @@ impl Dir {
     }
 }
 
-impl Flipped {
-    fn flip(&self) -> Flipped {
-        match self {
-            Flipped::Yes => Flipped::No,
-            Flipped::No => Flipped::Yes,
-        }
-    }
-}
-
 fn parse_tiles(buffer: &str) -> Result<HashMap<TileId, Tile>, Box<dyn Error>> {
     Ok(buffer
+        .trim()
         .split("\n\n")
         .map(|x| x.parse::<Tile>().unwrap())
         .map(|x| (x.id, x))
@@ -293,8 +280,8 @@ fn identify_corners(tiles: &HashMap<TileId, Tile>) -> Vec<TileId> {
 
     tile_unshared_count
         .iter()
-        .filter(|(x, y)| **y == 4)
-        .map(|(x, y)| *x)
+        .filter(|(_x, y)| **y == 4)
+        .map(|(x, _y)| *x)
         .collect::<Vec<_>>()
 }
 
@@ -337,10 +324,22 @@ fn make_picture(grid: &Vec<Vec<TileMeta>>, tiles: &HashMap<TileId, Tile>) -> Vec
     pic
 }
 
+// From rosetta code
 fn print_picture(pic: &Vec<Vec<char>>) {
     for y in pic {
         for x in y {
-            print!("{}", x);
+            print!("\x1b[{};{}m{}\x1b[0m",
+                   match x {
+                       'O' => 1,
+                       '#' => 5,
+                       _ => 0,
+                   },
+                   match x {
+                       'O' => 32,
+                       '#' => 34,
+                       _ => 0,
+                   },
+                   x);
         }
         println!("");
     }
@@ -360,9 +359,21 @@ fn monster_check(pic: &Vec<Vec<char>>, x: usize, y:usize) -> bool {
             } 
         }
     }
+
+    true
 }
 
-fn monster_hunt(pic: &Vec<Vec<char>>) -> u64 {
+fn monster_mark(pic: &mut Vec<Vec<char>>, x: usize, y: usize) {
+    for (my, row) in MONSTER.lines().enumerate() {
+        for (mx, ch) in row.chars().enumerate() {
+            if ch == '#' {
+                pic[y + my][x + mx] = 'O';
+            } 
+        }
+    }
+}
+
+fn monster_hunt(pic: &mut Vec<Vec<char>>) -> usize {
     let pic_height = pic.len();
     let pic_width = pic[0].len();
 
@@ -374,6 +385,7 @@ fn monster_hunt(pic: &Vec<Vec<char>>) -> u64 {
         for x in 0..(pic_width - monster_width) {
             if monster_check(pic, x, y) {
                 count += 1;
+                monster_mark(pic, x, y);
             }
         }
     }
@@ -385,19 +397,39 @@ fn rotate_pic(pic: &Vec<Vec<char>>) -> Vec<Vec<char>> {
     let pic_height = pic.len();
     let pic_width = pic[0].len();
 
-    let new_pic: Vec<Vec<char>> = vec![vec![' '; pic_width]; pic_height];
+    // height & width are interchanged
+    let mut new_pic: Vec<Vec<char>> = vec![vec![' '; pic_height]; pic_width];
 
     for (y, col) in pic.iter().enumerate() {
         for (x, ch) in col.iter().enumerate() {
-            new_pic[x][y] = ch;
+            let new_x = pic_height - y - 1;
+            let new_y = x;
+            new_pic[new_y][new_x] = *ch;
         }
     }
-
 
     new_pic
 }
 
-fn solve2(buffer: &str) -> Result<u64, Box<dyn Error>> {
+fn flip_pic(pic: &Vec<Vec<char>>) -> Vec<Vec<char>> {
+    let pic_height = pic.len();
+    let pic_width = pic[0].len();
+
+    // height & width are interchanged
+    let mut new_pic: Vec<Vec<char>> = vec![vec![' '; pic_width]; pic_height];
+
+    for (y, col) in pic.iter().enumerate() {
+        for (x, ch) in col.iter().enumerate() {
+            let new_x = pic_width - x - 1;
+            let new_y = y;
+            new_pic[new_y][new_x] = *ch;
+        }
+    }
+
+    new_pic
+}
+
+fn solve2(buffer: &str) -> Result<usize, Box<dyn Error>> {
     let tiles = parse_tiles(buffer)?;
     let mut corners = identify_corners(&tiles);
     corners.sort();
@@ -413,10 +445,24 @@ fn solve2(buffer: &str) -> Result<u64, Box<dyn Error>> {
     }
 
     let mut top_left = tiles[&corners[1]].to_meta(); // for testing
+    let mut corner_dirs = HashSet::new();
+    for (i, border) in tiles[&corners[1]].borders.iter().enumerate() {
+        if borders[border].len() > 1 {
+            corner_dirs.insert(Dir::from(i as i32));
+        }
+    }
+    let mut desired_dirs = HashSet::new();
+    desired_dirs.insert(Dir::Right);
+    desired_dirs.insert(Dir::Bottom);
 
-    // TODO Figure out the right rotation for the corner
-    top_left.rotation = 2;
-    top_left.flipped = true;
+    let mut corner_rotation = 0;
+    while corner_dirs != desired_dirs {
+        corner_rotation += 1;
+        corner_dirs = corner_dirs.into_iter()
+            .map(|x| x.rotate(1))
+            .collect::<HashSet<_>>();
+    }
+    top_left.rotation = corner_rotation;
 
     let total = tiles.len();
     let side = ((total as f64).sqrt()) as usize;
@@ -455,11 +501,26 @@ fn solve2(buffer: &str) -> Result<u64, Box<dyn Error>> {
         }
     }
 
+    println!();
     print_grid(&grid, &tiles);
-    let pic = make_picture(&grid, &tiles);
-    print_picture(&pic);
-    
+    let mut pic = make_picture(&grid, &tiles);
 
+    for i in 0..8 {
+        let monsters = monster_hunt(&mut pic);
+        if monsters > 0 {
+            print_picture(&pic);
+            println!();
+            let roughness = pic.iter().flatten().filter(|x| **x == '#').count();
+            let monster_size = MONSTER.chars().filter(|x| *x == '#').count();
+
+            return Ok(roughness - monsters * monster_size);
+        }
+
+        pic = rotate_pic(&pic);
+        if i == 4 {
+            pic = flip_pic(&pic);
+        }
+    }
 
     Ok(0)
 }
