@@ -1,20 +1,22 @@
+use itertools::Itertools;
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::default::Default;
 use std::env;
 use std::error::Error;
+use std::fmt;
+use std::fmt::Formatter;
 use std::io::{self, Read};
+use std::str::FromStr;
 
-use lazy_static::lazy_static;
-use regex::Regex;
+const S: usize = 10;
 
-fn parse(line: &str) -> Result<&str, Box<dyn Error>> {
-    lazy_static! {
-        static ref RE: Regex = Regex::new(r#"(?P<cap>.*)"#).unwrap();
-    }
-    let captures = RE.captures(line).unwrap();
-    let result = captures.name("cap").unwrap().as_str();
-    Ok(result)
-}
+const MONSTER: &'static str = "                  # 
+#    ##    ##    ###
+ #  #  #  #  #  #   ";
+
+#[derive(Debug, PartialEq, Eq, Hash, Copy, Clone, PartialOrd, Ord, Default)]
+struct TileId(u64);
 
 #[derive(Debug, PartialEq, Eq, Hash, Copy, Clone)]
 enum Dir {
@@ -24,9 +26,219 @@ enum Dir {
     Left = 3,
 }
 
+#[derive(Debug, PartialEq, Eq, Hash, Copy, Clone)]
+enum Flipped {
+    Yes = 1,
+    No = 0,
+}
+
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Default)]
+struct TileMeta {
+    id: TileId,
+    rotation: i32,
+    flipped: bool,
+}
+
+#[derive(PartialEq, Eq, Hash, Clone, Default)]
+struct Tile {
+    id: TileId,
+    borders: [u16; 4],
+    contents: Vec<Vec<char>>,
+}
+
+impl fmt::Display for TileId {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl TileMeta {
+    fn lookup(&self, x: usize, y: usize) -> (usize, usize) {
+        let mut x = x;
+        let mut y = y;
+        if self.flipped {
+            x = S - x - 1;
+        }
+
+        for _ in 0..self.rotation {
+            // Rotate anti clockwise
+            let temp = S - x - 1;
+            x = y;
+            y = temp;
+        }
+        (x, y)
+    }
+
+    fn get(&self, tile: &Tile, x: usize, y: usize) -> char {
+        let (x, y) = self.lookup(x, y);
+        tile.contents[y][x]
+    }
+
+    fn border(&self, tile: &Tile, dir: Dir) -> u16 {
+        let mut dir = dir;
+        let mut flip_contents = false;
+
+        // Flipping happens after rotation
+        if self.flipped {
+            match dir {
+                Dir::Top | Dir::Bottom => {
+                    flip_contents = true;
+                }
+                Dir::Left => {
+                    dir = Dir::Right;
+                }
+                Dir::Right => {
+                    dir = Dir::Left;
+                }
+            }
+        }
+
+        let original_dir = dir.rotate(-self.rotation);
+
+        if original_dir as u8 / 2 != dir as u8 / 2 {
+            flip_contents = !flip_contents;
+        }
+
+        let border = tile.border(original_dir);
+        if flip_contents {
+            Tile::invert(border)
+        } else {
+            border
+        }
+    }
+
+    fn transform(id: TileId, dir1: Dir, dir2: Dir, flip: Flipped) -> TileMeta {
+        let mut rotation = Dir::rotation(&dir2, &dir1);
+        let mut flipped = false;
+
+        let contents_flipped = if dir1 as u8 / 2 != dir2 as u8 / 2 {
+            Flipped::Yes
+        } else {
+            Flipped::No
+        };
+
+        if flip != contents_flipped {
+            if dir1 == Dir::Left || dir1 == Dir::Right {
+                rotation += 2;
+            }
+            flipped = true;
+        }
+
+        TileMeta {
+            id,
+            rotation: rotation % 4,
+            flipped,
+        }
+    }
+}
+
+impl Tile {
+    fn encode(line: &[char]) -> u16 {
+        assert_eq!(line.len(), 10);
+        line.iter()
+            .map(|x| match x {
+                '.' => 0 as u16,
+                '#' => 1 as u16,
+                _ => unreachable!(),
+            })
+            .fold(0, |a, x| a * 2 + x)
+    }
+
+    fn invert(x: u16) -> u16 {
+        let mut inverted = 0;
+        let mut x = x;
+        for _ in 0..10 {
+            inverted = inverted * 2 + (x & 1);
+            x /= 2;
+        }
+        inverted
+    }
+
+    fn border(&self, dir: Dir) -> u16 {
+        self.borders[dir as usize]
+    }
+
+    fn to_meta(&self) -> TileMeta {
+        TileMeta {
+            id: self.id,
+            rotation: 0,
+            flipped: false,
+        }
+    }
+}
+
+impl FromStr for Tile {
+    type Err = Box<dyn Error>;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut lines = s.trim().lines();
+        let id_line = lines.next().ok_or("No tile header")?;
+        let id = TileId(id_line[5..id_line.len() - 1].parse::<u64>()?);
+        let contents = lines.map(|x| x.chars().collect_vec()).collect::<Vec<_>>();
+
+        let mut borders = [0; 4];
+        borders[Dir::Top as usize] = Tile::encode(&contents[0]);
+        borders[Dir::Bottom as usize] = Tile::encode(&contents[contents.len() - 1]);
+        borders[Dir::Left as usize] =
+            Tile::encode(&contents.iter().map(|x| x[0]).collect::<Vec<_>>());
+        borders[Dir::Right as usize] =
+            Tile::encode(&contents.iter().map(|x| x[x.len() - 1]).collect::<Vec<_>>());
+
+        Ok(Tile {
+            id,
+            contents,
+            borders,
+        })
+    }
+}
+
+impl fmt::Debug for Tile {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_fmt(format_args!("Tile: {}\n", self.id))?;
+
+        f.write_fmt(format_args!("       {:5}      \n", self.border(Dir::Top)))?;
+        f.write_fmt(format_args!(
+            "      !{:5}      \n",
+            Tile::invert(self.border(Dir::Top))
+        ))?;
+        f.write_fmt(format_args!(
+            " {:5}       {:5}\n",
+            self.border(Dir::Left),
+            self.border(Dir::Right)
+        ))?;
+        f.write_fmt(format_args!(
+            "!{:5}      !{:5}\n",
+            Tile::invert(self.border(Dir::Left)),
+            Tile::invert(self.border(Dir::Right))
+        ))?;
+        f.write_fmt(format_args!(
+            "       {:5}      \n",
+            self.border(Dir::Bottom)
+        ))?;
+        f.write_fmt(format_args!(
+            "      !{:5}      \n",
+            Tile::invert(self.border(Dir::Bottom))
+        ))?;
+
+        f.write_str("\n")
+    }
+}
+
+impl fmt::Display for Tile {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        for line in &self.contents {
+            for ch in line {
+                write!(f, "{}", ch)?;
+            }
+            writeln!(f)?;
+        }
+        writeln!(f)
+    }
+}
+
 impl Dir {
-    pub fn rotate(&self, clockwise: i32) -> Dir {
-        match (*self as i32 + clockwise) % 4 {
+    fn from(val: i32) -> Dir {
+        match ((val % 4) + 4) % 4 {
             0 => Dir::Top,
             1 => Dir::Right,
             2 => Dir::Bottom,
@@ -35,238 +247,221 @@ impl Dir {
         }
     }
 
+    fn rotate(&self, clockwise: i32) -> Dir {
+        Dir::from(*self as i32 + clockwise)
+    }
+
     pub fn rotation(d1: &Dir, d2: &Dir) -> i32 {
-        *d2 as i32 - *d1 as i32
+        ((*d2 as i32 - *d1 as i32) %4 + 4) % 4
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Hash, Copy, Clone)]
-enum Flip {
-    Yes,
-    No,
-}
-
-impl Flip {
-    fn flip(&self) -> Flip {
+impl Flipped {
+    fn flip(&self) -> Flipped {
         match self {
-            Flip::Yes => Flip::No,
-            Flip::No => Flip::Yes,
+            Flipped::Yes => Flipped::No,
+            Flipped::No => Flipped::Yes,
         }
     }
 }
 
-type Borders = HashMap<String, Vec<(Dir, Flip, u64)>>;
-
-fn extract(buffer: &str) -> Result<(Borders, HashMap<u64, Vec<String>>), Box<dyn Error>> {
-    let mut borders: HashMap<String, Vec<(Dir, Flip, u64)>> = HashMap::new();
-    let mut tiles = HashMap::new();
-
-    for tile_buffer in buffer.trim().split("\n\n") {
-        let lines = tile_buffer.lines().collect::<Vec<_>>();
-        let tile_id = &lines[0][5..lines[0].len() - 1].parse::<u64>()?;
-        let tile_contents = lines[1..]
-            .iter()
-            .map(|x| String::from(*x))
-            .collect::<Vec<_>>();
-
-        tiles.insert(*tile_id, tile_contents.clone());
-
-        let top = borders
-            .entry(String::from(&tile_contents[0]))
-            .or_insert(vec![]);
-        top.push((Dir::Top, Flip::No, *tile_id));
-
-        let top_flipped = borders
-            .entry(tile_contents[0].chars().rev().collect::<String>())
-            .or_insert(vec![]);
-        top_flipped.push((Dir::Top, Flip::Yes, *tile_id));
-
-        let bottom = borders
-            .entry(String::from(&tile_contents[tile_contents.len() - 1]))
-            .or_insert(vec![]);
-        bottom.push((Dir::Bottom, Flip::No, *tile_id));
-
-        let bottom_flipped = borders
-            .entry(
-                tile_contents[tile_contents.len() - 1]
-                    .chars()
-                    .rev()
-                    .collect::<String>(),
-            )
-            .or_insert(vec![]);
-        bottom_flipped.push((Dir::Bottom, Flip::Yes, *tile_id));
-
-        let mut left_root = String::from("");
-        tile_contents
-            .iter()
-            .map(|x| &x[0..1])
-            .fold(&mut left_root, |a, x| {
-                a.push_str(x);
-                a
-            });
-        let left = borders.entry(left_root.clone()).or_insert(vec![]);
-        left.push((Dir::Left, Flip::No, *tile_id));
-
-        let left_flipped = borders
-            .entry(left_root.chars().rev().collect::<String>())
-            .or_insert(vec![]);
-        left_flipped.push((Dir::Left, Flip::Yes, *tile_id));
-
-        let mut right_root = String::from("");
-        tile_contents
-            .iter()
-            .map(|x| &x[x.len() - 1..])
-            .fold(&mut right_root, |a, x| {
-                a.push_str(x);
-                a
-            });
-        let right = borders.entry(right_root.clone()).or_insert(vec![]);
-        right.push((Dir::Right, Flip::No, *tile_id));
-
-        let right_flipped = borders
-            .entry(right_root.chars().rev().collect::<String>())
-            .or_insert(vec![]);
-        right_flipped.push((Dir::Right, Flip::Yes, *tile_id));
-    }
-
-    Ok((borders, tiles))
+fn parse_tiles(buffer: &str) -> Result<HashMap<TileId, Tile>, Box<dyn Error>> {
+    Ok(buffer
+        .split("\n\n")
+        .map(|x| x.parse::<Tile>().unwrap())
+        .map(|x| (x.id, x))
+        .collect::<HashMap<_, _>>())
 }
 
-fn solve1(buffer: &str) -> Result<String, Box<dyn Error>> {
-    let (borders, _tiles) = extract(buffer)?;
-
-    let mut tile_counts = HashMap::new();
-    for (border, tiles) in &borders {
-        for tile in tiles {
-            let entry = tile_counts.entry(tile.2).or_insert(0);
-            if tiles.len() == 1 {
-                *entry += 1;
-            }
+fn identify_corners(tiles: &HashMap<TileId, Tile>) -> Vec<TileId> {
+    let mut border_dict: HashMap<u16, Vec<&Tile>> = HashMap::new();
+    for (_id, tile) in tiles.iter() {
+        for border in &tile.borders {
+            let entry = border_dict.entry(*border).or_insert(vec![]);
+            entry.push(tile);
+            let flipped_entry = border_dict.entry(Tile::invert(*border)).or_insert(vec![]);
+            flipped_entry.push(tile);
         }
     }
 
-    Ok(tile_counts
+    let mut tile_unshared_count: HashMap<TileId, usize> = HashMap::new();
+    for tiles in border_dict.values() {
+        if tiles.len() == 1 {
+            *tile_unshared_count.entry(tiles[0].id).or_insert(0) += 1;
+        }
+    }
+
+    tile_unshared_count
         .iter()
-        .filter_map(|(x, y)| if *y == 4 { Some(x) } else { None })
-        .product::<u64>()
-        .to_string())
+        .filter(|(x, y)| **y == 4)
+        .map(|(x, y)| *x)
+        .collect::<Vec<_>>()
 }
 
-
-#[derive(Debug, PartialEq, Eq, Hash, Copy, Clone)]
-struct Transform {
-    clockwise: i32,
-    flip: bool
-}
-
-impl Transform {
-
-    fn id() -> Transform {
-        Transform { clockwise: 0, flip: false }
-    }
-
-    fn from(f1: Flip, f2: Flip, d1: Dir, d2: Dir) -> Transform {
-        dbg!(d1, d2, Dir::rotation(&d2, &d1));
-        Transform { clockwise: Dir::rotation(&d2, &d1), flip: f1 != f2 }
-    }
-
-    fn apply(&self, f: Flip, d: Dir) -> (Flip, Dir) {
-        // Rotate first, then flip and *also adjust the direction*
-        // I only flip horizontally
-
-        let d = d.rotate(self.clockwise);
-
-        match (self.flip, d) {
-            (true, Dir::Top) | (true, Dir::Bottom) => (Flip::Yes, d),
-            (true, Dir::Right) | (true, Dir::Left) => (Flip::No, d.rotate(2)),
-            (false, d) => (Flip::No, d),
-        }
-    }
-
-    fn original(&self, d: Dir) -> (Flip, Dir) {
-        unimplemented!()
-    }
-}
-
-fn solve2(buffer: &str) -> Result<String, Box<dyn Error>> {
-    let (borders, tiles) = extract(buffer)?;
-    let total_tiles = tiles.len();
-    let side = (total_tiles as f64).sqrt() as usize;
-
-    let border_counts = borders.iter().map(|(x, y)| (x, y.len())).collect::<HashMap<_, _>>();
-    let mut tile_counts = HashMap::new();
-
-    let mut tile_borders: HashMap<u64, HashMap<(Flip, Dir), &str>> = HashMap::new();
-
-    for (border, tiles) in &borders {
-        for tile in tiles {
-            let entry = tile_counts.entry(tile.2).or_insert(0);
-            if tiles.len() == 1 {
-                *entry += 1;
-            }
-
-            let hash_entry = tile_borders.entry(tile.2).or_insert(HashMap::new());
-            hash_entry.insert((tile.1, tile.0), border);
-        }
-    }
-
-    let mut corners = tile_counts
-        .iter()
-        .filter_map(|(x, y)| if *y == 4 { Some(x) } else { None })
-        .collect::<Vec<_>>();
-    corners.sort();
-    let mut grid = vec![vec![(0, Transform::id()); side]; side];
-    grid[0][0].0 = *corners[1];
-
-    let mut current_sides = HashSet::new();
-    for (border, tiles) in &borders {
-        for tile in tiles {
-            if tile.2 == grid[0][0].0 && tiles.len() == 2 {
-                current_sides.insert(tile.0);
-            }
-        }
-    }
-
-    let mut rotation = 0;
-    let desired_sides = vec![Dir::Left, Dir::Bottom].into_iter().collect::<HashSet<Dir>>();
-
-    while desired_sides != current_sides {
-        rotation += 1;
-        current_sides = current_sides.iter().map(|x| x.rotate(1)).collect::<HashSet<Dir>>();
-    }
-
-    // Figure out orientation of the top left tile
-    // grid[0][0].1 = Transform { flip: false, clockwise: rotation };
-    grid[0][0].1 = Transform::from(Flip::No, Flip::Yes, Dir::Bottom, Dir::Top);
-    let mut prev_tile = grid[0][0].clone();
-
-    for (i, col) in grid[0].iter_mut().enumerate() {
-        if i != 0 {
-            let i = i + 1;
-            let side_details = prev_tile.1.invert(Dir::Right);
-            dbg!(side_details);
-
-            let side = tile_borders[&prev_tile.0][&side_details];
-
-            let cur_tile = borders[side].iter().filter(|x| x.2 != prev_tile.0).next().unwrap();
-            dbg!(cur_tile);
-
-            col.1 = Transform::from(cur_tile.1, Flip::No, cur_tile.0, Dir::Left);
-            col.0 = cur_tile.2;
-            dbg!(col.1);
-        }
-
-        prev_tile = col.clone();
-    }
-
+fn print_grid(grid: &Vec<Vec<TileMeta>>, tiles: &HashMap<TileId, Tile>) {
     for row in grid {
-        for col in row {
-            print!("{:5?} ", col);
+        for y in 0..10 {
+            for col in row {
+                if col.id.0 != 0 {
+                    for x in 0..10 {
+                        let (x, y) = col.lookup(x, y);
+                        print!("{}", tiles[&col.id].contents[y][x]);
+                    }
+                    print!(" ");
+                }
+            }
+            println!();
         }
         println!();
     }
+}
 
-    Ok(format!("Solution 2: {}", parse(buffer)?))
+fn make_picture(grid: &Vec<Vec<TileMeta>>, tiles: &HashMap<TileId, Tile>) -> Vec<Vec<char>> {
+    let mut pic = vec![];
+
+    for row in grid {
+        for y in 1..(S - 1) {
+            let mut output = vec![];
+            for col in row {
+                if col.id.0 != 0 {
+                    for x in 1..(S - 1) {
+                        let (x, y) = col.lookup(x, y);
+                        output.push(tiles[&col.id].contents[y][x]);
+                    }
+                }
+            }
+            pic.push(output);
+        }
+    }
+
+    pic
+}
+
+fn print_picture(pic: &Vec<Vec<char>>) {
+    for y in pic {
+        for x in y {
+            print!("{}", x);
+        }
+        println!("");
+    }
+}
+
+fn solve1(buffer: &str) -> Result<u64, Box<dyn Error>> {
+    let tiles = parse_tiles(buffer)?;
+    Ok(identify_corners(&tiles).iter().map(|x| x.0).product())
+}
+
+fn monster_check(pic: &Vec<Vec<char>>, x: usize, y:usize) -> bool {
+    for (my, row) in MONSTER.lines().enumerate() {
+        for (mx, ch) in row.chars().enumerate() {
+            match ch {
+                '#' => if ch != pic[y + my][x + mx] { return false; }
+                _ => {}
+            } 
+        }
+    }
+}
+
+fn monster_hunt(pic: &Vec<Vec<char>>) -> u64 {
+    let pic_height = pic.len();
+    let pic_width = pic[0].len();
+
+    let monster_height = MONSTER.lines().count();
+    let monster_width: usize = MONSTER.lines().next().unwrap().len();
+
+    let mut count = 0;
+    for y in 0..(pic_height - monster_height) {
+        for x in 0..(pic_width - monster_width) {
+            if monster_check(pic, x, y) {
+                count += 1;
+            }
+        }
+    }
+
+    count
+}
+
+fn rotate_pic(pic: &Vec<Vec<char>>) -> Vec<Vec<char>> {
+    let pic_height = pic.len();
+    let pic_width = pic[0].len();
+
+    let new_pic: Vec<Vec<char>> = vec![vec![' '; pic_width]; pic_height];
+
+    for (y, col) in pic.iter().enumerate() {
+        for (x, ch) in col.iter().enumerate() {
+            new_pic[x][y] = ch;
+        }
+    }
+
+
+    new_pic
+}
+
+fn solve2(buffer: &str) -> Result<u64, Box<dyn Error>> {
+    let tiles = parse_tiles(buffer)?;
+    let mut corners = identify_corners(&tiles);
+    corners.sort();
+
+    let mut borders: HashMap<u16, Vec<(TileId, Dir, Flipped)>> = HashMap::new();
+    for (id, tile) in tiles.iter() {
+        for (i, border) in tile.borders.iter().enumerate() {
+            let entry = borders.entry(*border).or_insert(vec![]);
+            entry.push((*id, Dir::from(i as i32), Flipped::No));
+            let flipped_entry = borders.entry(Tile::invert(*border)).or_insert(vec![]);
+            flipped_entry.push((*id, Dir::from(i as i32), Flipped::Yes));
+        }
+    }
+
+    let mut top_left = tiles[&corners[1]].to_meta(); // for testing
+
+    // TODO Figure out the right rotation for the corner
+    top_left.rotation = 2;
+    top_left.flipped = true;
+
+    let total = tiles.len();
+    let side = ((total as f64).sqrt()) as usize;
+
+    let mut grid: Vec<Vec<TileMeta>> = vec![vec![Default::default(); side]; side];
+
+    grid[0][0] = top_left;
+
+    // Fill the first row
+    for i in 1..side {
+        let prev = &grid[0][i - 1];
+        let constraint = prev.border(&tiles[&prev.id], Dir::Right);
+        let option = *&borders[&constraint]
+            .iter()
+            .filter(|x| x.0 != prev.id)
+            .next()
+            .unwrap();
+
+        grid[0][i] = TileMeta::transform(option.0, Dir::Left, option.1, option.2);
+    }
+
+    // Fill the rest of the grid row by row
+    for y in 1..side {
+        for x in 0..side {
+            let prev = &grid[y - 1][x];
+            let constraint = prev.border(&tiles[&prev.id], Dir::Bottom);
+            let options = &borders[&constraint]
+                .iter()
+                .filter(|x| x.0 != prev.id)
+                .copied()
+                .collect::<Vec<_>>();
+            assert_eq!(options.len(), 1);
+            let option = options[0];
+            let transform = TileMeta::transform(option.0, Dir::Top, option.1, option.2);
+            grid[y][x] = transform;
+        }
+    }
+
+    print_grid(&grid, &tiles);
+    let pic = make_picture(&grid, &tiles);
+    print_picture(&pic);
+    
+
+
+    Ok(0)
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -400,8 +595,104 @@ Tile 3079:
 ..#.###...";
 
     #[test]
+    fn test_encode() {
+        for test in &["##.#.#####", ".#..######", "..#.......", "######...."] {
+            let mut num = test.to_string();
+            num = num.replace("#", "1");
+            num = num.replace(".", "0");
+            let num = u16::from_str_radix(&num, 2).unwrap();
+            assert_eq!(num, Tile::encode(&test.chars().collect::<Vec<_>>()));
+        }
+    }
+
+    #[test]
+    fn test_invert() {
+        let test = u16::from_str_radix("0001010010", 2).unwrap();
+        let inverted = u16::from_str_radix("0100101000", 2).unwrap();
+        let x = Tile::invert(test);
+        assert_eq!(inverted, x);
+    }
+
+    #[test]
+    fn test_lookup() {
+        let meta = TileMeta {
+            flipped: false,
+            rotation: 2,
+            ..Default::default()
+        };
+        assert_eq!(meta.lookup(9, 9), (0, 0));
+
+        let meta = TileMeta {
+            flipped: false,
+            rotation: 1,
+            ..Default::default()
+        };
+        assert_eq!(meta.lookup(1, 2), (2, 8));
+
+        let meta = TileMeta {
+            flipped: true,
+            rotation: 2,
+            ..Default::default()
+        };
+        assert_eq!(meta.lookup(1, 2), (1, 7));
+    }
+
+    #[test]
+    fn test_dir_lookup() {
+        let tile = Tile {
+            borders: [1, 2, 3, 4],
+            ..Default::default()
+        };
+        let mut meta = TileMeta {
+            flipped: false,
+            rotation: 1,
+            ..Default::default()
+        };
+        assert_eq!(
+            meta.border(&tile, Dir::Top),
+            Tile::invert(tile.border(Dir::Left))
+        );
+
+        meta.rotation = 2;
+        assert_eq!(
+            meta.border(&tile, Dir::Top),
+            Tile::invert(tile.border(Dir::Bottom))
+        );
+
+        meta.rotation = 3;
+        assert_eq!(meta.border(&tile, Dir::Top), tile.border(Dir::Right));
+    }
+
+    #[test]
+    fn test_flipped_dir_lookup() {
+        let tile = Tile {
+            borders: [1, 2, 3, 4],
+            ..Default::default()
+        };
+        let mut meta = TileMeta {
+            flipped: true,
+            rotation: 1,
+            ..Default::default()
+        };
+        assert_eq!(meta.border(&tile, Dir::Top), tile.border(Dir::Left));
+
+        meta.rotation = 2;
+        assert_eq!(meta.border(&tile, Dir::Top), tile.border(Dir::Bottom));
+        assert_eq!(
+            meta.border(&tile, Dir::Right),
+            Tile::invert(tile.border(Dir::Right))
+        );
+
+        meta.rotation = 3;
+        assert_eq!(
+            meta.border(&tile, Dir::Top),
+            Tile::invert(tile.border(Dir::Right))
+        );
+    }
+
+    #[test]
     fn test1() {
-        // dbg!(solve1(INPUT));
+        assert_eq!(solve1(INPUT).unwrap(), 20899048083289);
     }
 
     #[test]
