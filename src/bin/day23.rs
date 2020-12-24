@@ -1,163 +1,124 @@
 use std::env;
 use std::error::Error;
 use std::io::{self, Read};
-use std::collections::HashSet;
 
 fn solve1(buffer: &str) -> Result<String, Box<dyn Error>> {
-    let mut labels = buffer
-        .trim()
-        .chars()
-        .map(|x| x.to_digit(10).unwrap())
-        .collect::<Vec<_>>();
-    let len = labels.len();
+    let cups = solve(buffer, 100, 9)?;
 
-    let mut next_labels = vec![100; len];
-    let mut current_cup = 0;
-
-    // Clockwise = +ve in array
-    for _ in 0..100 {
-        let picked = (1..=3)
-            .map(|x| (current_cup + x) % len)
-            .map(|x| labels[x])
-            .collect::<HashSet<_>>();
-
-        let mut destination = labels[current_cup] - 1;
-        if destination == 0 {
-            destination += len as u32;
-        }
-
-        while picked.contains(&destination) {
-            destination -= 1;
-            if destination == 0 {
-                destination = len as u32;
-            }
-        }
-
-        next_labels[current_cup] = labels[current_cup];
-        let mut label_offset = (current_cup + 4) % len;
-        let mut next_offset = (current_cup + 1) % len;
-
-        loop {
-            let should_break = labels[label_offset] == destination;
-
-            next_labels[next_offset] = labels[label_offset];
-            label_offset = (label_offset + 1) % len;
-            next_offset = (next_offset + 1) % len;
-
-            if should_break {
-                break;
-            }
-        }
-
-        for i in 1..=3  {
-            next_labels[next_offset] = labels[(current_cup + i) % len];
-            next_offset = (next_offset + 1) % len;
-        }
-
-        while label_offset != current_cup {
-            next_labels[next_offset] = labels[label_offset];
-            label_offset = (label_offset + 1) % len;
-            next_offset = (next_offset + 1) % len;
-        }
-        
-        current_cup += 1;
-        if current_cup == len {
-            current_cup = 0;
-        }
-
-        let temp = labels;
-        labels = next_labels;
-        next_labels = temp;
-    }
-
-    let start_pos = labels.iter().position(|x| *x == 1).unwrap();
     let mut result = String::from("");
-    for offset in 1..=8 {
-        result += &labels[(start_pos + offset) % len].to_string();
+    let mut point = 1;
+    loop {
+        point = cups[point];
+
+        if point == 1 {
+            break;
+        }
+
+        result += &point.to_string();
     }
 
     Ok(result)
 }
 
-const ITER: usize = 10_000_000;
-const LEN: usize = 1_000_000;
-
-#[inline]
-fn label_modulo(x: u32) -> u32 {
-    if x == 0 {
-        LEN as u32
-    } else {
-        x
-    }
+fn solve2(buffer: &str) -> Result<usize, Box<dyn Error>> {
+    let cups = solve(buffer, 10_000_000, 1_000_000)?;
+    Ok(cups[1] * cups[cups[1]])
 }
 
-fn solve2(buffer: &str) -> Result<u64, Box<dyn Error>> {
+fn print_debug(cups: &Vec<usize>) {
+    let start = cups[0];
+    let mut point = start;
+
+    let mut max_iter = cups.len();
+
+    loop {
+        print!("{} ", point);
+        point = cups[point];
+
+        max_iter -= 1;
+
+        if point == start {
+            break;
+        }
+
+        if max_iter == 0 {
+            println!("!");
+            print!("{:?}", cups);
+            break;
+        }
+    }
+
+    if max_iter > 1 {
+        println!("!");
+        print!("{} {:?}", max_iter, cups);
+    }
+
+    println!();
+}
+
+fn solve(buffer: &str, iter: usize, len: usize) -> Result<Vec<usize>, Box<dyn Error>> {
+    let mut cups: Vec<usize> = vec![0; len + 1];
+
     let input = buffer
         .trim()
         .chars()
-        .map(|x| x.to_digit(10).unwrap())
+        .map(|x| x.to_digit(10).unwrap() as usize)
         .collect::<Vec<_>>();
+    // println!("{:?}", input);
 
-    let mut labels = [0; LEN];
-    for (i, &l) in input.iter().enumerate() {
-        labels[i] = l;
+    let mut prev = 0;
+    for (i, &x) in input.iter().enumerate() {
+        cups[prev] = x;
+        prev = x;
     }
-    for i in 9..LEN {
-        labels[i] = (i + 1) as u32;
-    }
 
-    let mut picked: [u32; 4] = [0; 4];
+    if input.len() < len {
+        cups[prev] = input.len() + 1; // Connect the two
 
-    let mut val = 0;
-    let mut start_pos = labels.iter().position(|&x| x == 1).unwrap();
-
-    // Current cup is always at position 0
-    // Clockwise = +ve in array
-    for p in 0..ITER {
-        // println!("{:?}", labels);
-
-        picked.copy_from_slice(&labels[0..4]);
-        let mut dest_label = label_modulo(labels[0] - 1);
-        while picked.iter().position(|&x| x == dest_label).is_some() {
-            dest_label = label_modulo(dest_label - 1);
+        for i in input.len() + 1..=len {
+            cups[i] = i + 1;
+            prev = i;
         }
-        // println!("{}", dest_label);
+    }
 
-        let dest_pos = labels.iter().position(|&x| x == dest_label).unwrap();
-        labels.copy_within(4..=dest_pos, 0);
+    cups[prev] = input[0]; // Make it a circle
 
-        let new_dest_pos = dest_pos - 4;
-        labels[new_dest_pos + 1..=new_dest_pos + 3].copy_from_slice(&picked[1..]);
-        labels.copy_within(dest_pos + 1..LEN, dest_pos);
-        labels[LEN - 1] = picked[0];
+    let mut next3 = [0; 3];
+    let mut point = cups[0];
 
+    // print_debug(&cups);
 
-        if let Some(p_pos) = picked.iter().position(|&x| x == 1) {
-            if p_pos == 0 {
-                start_pos = LEN - 1;
-            } else {
-                start_pos = p_pos + new_dest_pos;
+    for _ in 0..iter {
+        let mut t = cups[point];
+        for i in 0..3 {
+            next3[i] = t;
+            t = cups[t];
+        }
+
+        let mut dest = if point - 1 == 0 { len } else { point - 1 };
+        while next3.iter().find(|&&x| x == dest).is_some() {
+            dest -= 1;
+            if dest == 0 {
+                dest = len;
             }
-        } else if start_pos <= dest_pos {
-            start_pos = (start_pos - 4) % LEN;
-        } else {
-            start_pos -= 1;
         }
-        assert_eq!(labels[start_pos], 1);
+        // print!("{} | ", dest);
 
-        let a = labels[(start_pos + 1) % LEN] as u64;
-        let b = labels[(start_pos + 2) % LEN] as u64;
-        let new_val = a * b;
-        if val != new_val {
-            println!("{:4} | {:10} | {:10} * {:10} = {:10} | ", p + 1, start_pos, a, b, new_val);
-            val = new_val;
-        }
+        // Point -> 0 -> 1 -> 2 -> x ... -> Dest -> y
+
+        // Point => x
+        cups[point] = cups[next3[2]];
+
+        // Dest => 0 -> 1 -> 2 => y
+        let y = cups[dest];
+        cups[dest] = next3[0];
+        cups[next3[2]] = y;
+
+        point = cups[point];
+        // print_debug(&cups);
     }
 
-    let start_pos = labels.iter().position(|x| *x == 1).unwrap();
-    let a = labels[(start_pos + 1) % LEN] as u64;
-    let b = labels[(start_pos + 2) % LEN] as u64;
-    Ok(a * b)
+    Ok(cups)
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -183,11 +144,12 @@ mod test {
 
     #[test]
     fn test1() {
-        dbg!(solve1("389125467"));
+        assert_eq!(solve1("389125467").unwrap(), "67384529");
     }
 
     #[test]
     fn test2() {
-        dbg!(solve2("389125467"));
+        let results = solve("389125467", 10_000_000, 1_000_000).unwrap();
+        assert_eq!(results[1] * results[results[1]], 149245887792);
     }
 }
