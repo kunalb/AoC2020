@@ -26,8 +26,9 @@ fn solve(buffer: &str) -> Result<u64, Box<dyn Error>> {
     let door_public_key = lines.next().unwrap().parse::<u64>()?;
 
     let mut loop_size = 1;
+    let mut result = 1;
     loop {
-        let result = mod_exp(7, loop_size, MOD); 
+        result = (result * 7) % MOD;
 
         if result == card_public_key {
             return Ok(mod_exp(door_public_key, loop_size, MOD))
